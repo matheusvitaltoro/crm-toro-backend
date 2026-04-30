@@ -58,25 +58,24 @@ router.post('/send', auth, async (req, res) => {
   }
 });
 
-// POST /whatsapp/reconnect — recria instância ou reconfigura webhook para usuário existente
+// POST /whatsapp/reconnect — deleta instância antiga e cria uma nova
 router.post('/reconnect', auth, async (req, res) => {
   const { rows } = await pool.query('SELECT instance_name, email FROM users WHERE id=$1', [req.user.id]);
-  let instanceName = rows[0]?.instance_name;
+  const oldName = rows[0]?.instance_name;
+  const email   = rows[0]?.email;
 
-  try {
-    if (!instanceName) {
-      instanceName = 'toro_' + rows[0].email.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20) + '_' + Date.now();
-      await pool.query('UPDATE users SET instance_name=$1 WHERE id=$2', [instanceName, req.user.id]);
-      await evolution.createInstance(instanceName);
-    } else {
-      // Tenta só setar webhook; se a instância não existir (404), recria
-      try {
-        await evolution.setWebhook(instanceName);
-      } catch (e) {
-        console.log('Instância não encontrada, recriando:', instanceName);
-        await evolution.createInstance(instanceName);
-      }
+  // Deleta instância antiga (ignora erro se não existir)
+  if (oldName) {
+    try { await evolution.deleteInstance(oldName); } catch (e) {
+      console.log('Delete ignorado:', e.message);
     }
+  }
+
+  // Cria instância nova com timestamp único
+  const instanceName = 'toro_' + email.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20) + '_' + Date.now();
+  try {
+    await pool.query('UPDATE users SET instance_name=$1, whatsapp_status=$2 WHERE id=$3', [instanceName, 'disconnected', req.user.id]);
+    await evolution.createInstance(instanceName);
     res.json({ ok: true, instanceName });
   } catch (e) {
     console.error('Reconnect error:', e.message);
