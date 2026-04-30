@@ -69,7 +69,13 @@ router.post('/reconnect', auth, async (req, res) => {
       await pool.query('UPDATE users SET instance_name=$1 WHERE id=$2', [instanceName, req.user.id]);
       await evolution.createInstance(instanceName);
     } else {
-      await evolution.setWebhook(instanceName);
+      // Tenta só setar webhook; se a instância não existir (404), recria
+      try {
+        await evolution.setWebhook(instanceName);
+      } catch (e) {
+        console.log('Instância não encontrada, recriando:', instanceName);
+        await evolution.createInstance(instanceName);
+      }
     }
     res.json({ ok: true, instanceName });
   } catch (e) {
