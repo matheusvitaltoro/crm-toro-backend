@@ -58,6 +58,26 @@ router.post('/send', auth, async (req, res) => {
   }
 });
 
+// POST /whatsapp/reconnect — recria instância ou reconfigura webhook para usuário existente
+router.post('/reconnect', auth, async (req, res) => {
+  const { rows } = await pool.query('SELECT instance_name, email FROM users WHERE id=$1', [req.user.id]);
+  let instanceName = rows[0]?.instance_name;
+
+  try {
+    if (!instanceName) {
+      instanceName = 'toro_' + rows[0].email.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20) + '_' + Date.now();
+      await pool.query('UPDATE users SET instance_name=$1 WHERE id=$2', [instanceName, req.user.id]);
+      await evolution.createInstance(instanceName);
+    } else {
+      await evolution.setWebhook(instanceName);
+    }
+    res.json({ ok: true, instanceName });
+  } catch (e) {
+    console.error('Reconnect error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /whatsapp/webhook/:instanceName — Evolution API chama aqui quando chega mensagem
 router.post('/webhook/:instanceName', async (req, res) => {
   res.sendStatus(200); // responde rápido pra Evolution API

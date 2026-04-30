@@ -6,6 +6,18 @@ const api = () => axios.create({
   timeout: 15000,
 });
 
+// Registra webhook na Evolution API para a instância
+async function setWebhook(instanceName) {
+  const backendUrl = process.env.BACKEND_URL;
+  if (!backendUrl) { console.warn('BACKEND_URL não definida — webhook não configurado'); return; }
+  await api().post(`/webhook/set/${instanceName}`, {
+    url: `${backendUrl}/whatsapp/webhook/${instanceName}`,
+    webhook_by_events: true,
+    webhook_base64: false,
+    events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+  });
+}
+
 // Cria uma instância nova para o cliente (chamado no cadastro)
 async function createInstance(instanceName) {
   const { data } = await api().post('/instance/create', {
@@ -13,6 +25,7 @@ async function createInstance(instanceName) {
     qrcode: true,
     integration: 'WHATSAPP-BAILEYS',
   });
+  try { await setWebhook(instanceName); } catch (e) { console.warn('setWebhook falhou:', e.message); }
   return data;
 }
 
@@ -43,4 +56,4 @@ async function deleteInstance(instanceName) {
   await api().delete(`/instance/delete/${instanceName}`);
 }
 
-module.exports = { createInstance, getQR, getStatus, sendText, deleteInstance };
+module.exports = { createInstance, setWebhook, getQR, getStatus, sendText, deleteInstance };
