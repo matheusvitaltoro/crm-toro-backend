@@ -20,10 +20,17 @@ router.get('/status', auth, async (req, res) => {
     // Não conectado: busca QR
     const qrData = await evolution.getQR(user.instance_name);
     await pool.query('UPDATE users SET whatsapp_status=$1 WHERE id=$2', ['disconnected', req.user.id]);
-    res.json({ status: 'disconnected', qr: qrData?.base64 || null });
+    // Evolution API v2 retorna QR em base64 direto ou dentro de qrcode.base64
+    const qrBase64 = qrData?.base64 || qrData?.qrcode?.base64 || null;
+    res.json({ status: 'disconnected', qr: qrBase64 });
   } catch (e) {
+    const status = e?.response?.status;
+    // Instância não existe na Evolution API → pede reconexão
+    if (status === 404 || status === 400) {
+      return res.json({ status: 'no_instance', message: 'Instância não encontrada. Clique em Reconectar.' });
+    }
     console.error('Evolution API erro:', e.message);
-    res.json({ status: 'error', message: e.message });
+    res.json({ status: 'error', message: 'Erro ao comunicar com Evolution API.' });
   }
 });
 
